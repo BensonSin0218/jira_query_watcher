@@ -10,7 +10,9 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   if (Platform.isMacOS) {
-    await autoUpdater.setFeedURL('https://github.com/BensonSin0218/jira_query_watcher/releases/latest/download/appcast.xml');
+    await autoUpdater.setFeedURL(
+      'https://github.com/BensonSin0218/jira_query_watcher/releases/latest/download/appcast.xml',
+    );
 
     // 最少 3600 秒
     await autoUpdater.setScheduledCheckInterval(86400);
@@ -225,9 +227,9 @@ class _WatchPageState extends State<WatchPage> {
             children: [
               _buildIntro(context),
               const SizedBox(height: 20),
-              _buildWatchesCard(context),
-              const SizedBox(height: 16),
               _buildOverviewCard(context),
+              const SizedBox(height: 16),
+              _buildWatchesCard(context),
             ],
           ),
         ),
