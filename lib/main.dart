@@ -283,7 +283,7 @@ class _WatchPageState extends State<WatchPage> {
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
               ),
               SizedBox(height: 4),
-              Text('每個監聽都有自己的檢查間隔與基準；issue 有新增或移除時會發送 macOS 通知。'),
+              Text('每個監聽都有自己的檢查間隔與基準；issue 清單或 status 有變動時會發送 macOS 通知。'),
             ],
           ),
         ),
@@ -504,6 +504,10 @@ class _WatchPageState extends State<WatchPage> {
                 ),
                 _Metric(label: '上次新增', value: '${diff.added.length} 項'),
                 _Metric(label: '上次移除', value: '${diff.removed.length} 項'),
+                _Metric(
+                  label: '上次狀態變更',
+                  value: '${diff.statusChanges.length} 項',
+                ),
               ],
             ),
             if (!watch.isValid) ...[
@@ -928,6 +932,8 @@ class _ChangeLists extends StatelessWidget {
           _IssueGroup(title: '新增', color: Colors.green, issues: diff.added),
         if (diff.removed.isNotEmpty)
           _IssueGroup(title: '移除', color: Colors.red, issues: diff.removed),
+        if (diff.statusChanges.isNotEmpty)
+          _StatusChangeGroup(changes: diff.statusChanges),
       ],
     );
   }
@@ -969,6 +975,44 @@ class _IssueGroup extends StatelessWidget {
                 ),
               ),
           if (issues.length > 10) Text('還有 ${issues.length - 10} 項…'),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatusChangeGroup extends StatelessWidget {
+  const _StatusChangeGroup({required this.changes});
+
+  final List<IssueStatusChange> changes;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 410,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '狀態變更',
+            style: TextStyle(color: Colors.orange, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 6),
+          ...changes
+              .take(10)
+              .map(
+                (change) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    '${change.current.key}  '
+                    '${change.previous.status ?? '未知'} → '
+                    '${change.current.status ?? '未知'}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+          if (changes.length > 10) Text('還有 ${changes.length - 10} 項…'),
         ],
       ),
     );

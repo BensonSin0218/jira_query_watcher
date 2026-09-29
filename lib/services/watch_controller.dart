@@ -455,12 +455,23 @@ class WatchController extends ChangeNotifier {
     final parts = <String>[];
     if (diff.added.isNotEmpty) parts.add('新增 ${diff.added.length} 項');
     if (diff.removed.isNotEmpty) parts.add('移除 ${diff.removed.length} 項');
+    if (diff.statusChanges.isNotEmpty) {
+      parts.add('狀態變更 ${diff.statusChanges.length} 項');
+    }
     return parts.join('，');
   }
 
   String _notificationBody(QueryDiff diff) {
     final added = diff.added.take(3).map((issue) => issue.key).join(', ');
     final removed = diff.removed.take(3).map((issue) => issue.key).join(', ');
+    final statusChanges = diff.statusChanges
+        .take(3)
+        .map((change) {
+          final previous = change.previous.status ?? '未知';
+          final current = change.current.status ?? '未知';
+          return '${change.current.key}：$previous → $current';
+        })
+        .join(', ');
     final parts = <String>[];
     if (diff.added.isNotEmpty) {
       parts.add('新增 ${diff.added.length} 項${added.isEmpty ? '' : '：$added'}');
@@ -468,6 +479,12 @@ class WatchController extends ChangeNotifier {
     if (diff.removed.isNotEmpty) {
       parts.add(
         '移除 ${diff.removed.length} 項${removed.isEmpty ? '' : '：$removed'}',
+      );
+    }
+    if (diff.statusChanges.isNotEmpty) {
+      parts.add(
+        '狀態變更 ${diff.statusChanges.length} 項'
+        '${statusChanges.isEmpty ? '' : '：$statusChanges'}',
       );
     }
     return parts.join('\n');
