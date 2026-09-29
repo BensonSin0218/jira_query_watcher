@@ -235,17 +235,19 @@ class WatchConfig {
 }
 
 class JiraIssue {
-  const JiraIssue({required this.key, required this.summary});
+  const JiraIssue({required this.key, required this.summary, this.status});
 
   final String key;
   final String summary;
+  final String? status;
 
   factory JiraIssue.fromJson(Map<String, dynamic> json) {
+    final fields = json['fields'];
+    final rawStatus = fields is Map ? fields['status'] : null;
     return JiraIssue(
       key: json['key'] as String? ?? '',
-      summary:
-          (json['fields'] as Map<String, dynamic>?)?['summary'] as String? ??
-          '',
+      summary: fields is Map ? fields['summary'] as String? ?? '' : '',
+      status: rawStatus is Map ? rawStatus['name'] as String? : null,
     );
   }
 
@@ -253,21 +255,37 @@ class JiraIssue {
     return JiraIssue(
       key: json['key'] as String? ?? '',
       summary: json['summary'] as String? ?? '',
+      status: json['status'] as String?,
     );
   }
 
   Map<String, String> toStoredJson() {
-    return {'key': key, 'summary': summary};
+    final stored = {'key': key, 'summary': summary};
+    if (status != null) stored['status'] = status!;
+    return stored;
   }
 }
 
+class IssueStatusChange {
+  const IssueStatusChange({required this.previous, required this.current});
+
+  final JiraIssue previous;
+  final JiraIssue current;
+}
+
 class QueryDiff {
-  const QueryDiff({this.added = const [], this.removed = const []});
+  const QueryDiff({
+    this.added = const [],
+    this.removed = const [],
+    this.statusChanges = const [],
+  });
 
   final List<JiraIssue> added;
   final List<JiraIssue> removed;
+  final List<IssueStatusChange> statusChanges;
 
-  bool get hasChanges => added.isNotEmpty || removed.isNotEmpty;
+  bool get hasChanges =>
+      added.isNotEmpty || removed.isNotEmpty || statusChanges.isNotEmpty;
 }
 
 QueryDiff compareIssues(List<JiraIssue> previous, List<JiraIssue> current) {
@@ -286,6 +304,27 @@ QueryDiff compareIssues(List<JiraIssue> previous, List<JiraIssue> current) {
           .map((entry) => entry.value)
           .toList()
         ..sort((a, b) => a.key.compareTo(b.key));
+  final statusChanges =
+      currentByKey.entries
+          .where((entry) {
+            final previousStatus = previousByKey[entry.key]?.status;
+            final currentStatus = entry.value.status;
+            return previousStatus != null &&
+                currentStatus != null &&
+                previousStatus != currentStatus;
+          })
+          .map(
+            (entry) => IssueStatusChange(
+              previous: previousByKey[entry.key]!,
+              current: entry.value,
+            ),
+          )
+          .toList()
+        ..sort((a, b) => a.current.key.compareTo(b.current.key));
 
-  return QueryDiff(added: added, removed: removed);
+  return QueryDiff(
+    added: added,
+    removed: removed,
+    statusChanges: statusChanges,
+  );
 }

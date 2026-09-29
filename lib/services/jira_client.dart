@@ -43,7 +43,7 @@ class JiraClient {
       final requestBody = <String, dynamic>{
         'jql': jql,
         'maxResults': 100,
-        'fields': ['summary'],
+        'fields': ['summary', 'status'],
       };
       if (nextPageToken != null) {
         requestBody['nextPageToken'] = nextPageToken;
@@ -88,7 +88,7 @@ class JiraClient {
           'jql': jql,
           'startAt': '$startAt',
           'maxResults': '$pageSize',
-          'fields': 'summary',
+          'fields': 'summary,status',
         },
       );
       final decoded = await _sendRequest(client, uri, config);
