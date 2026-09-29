@@ -1,0 +1,48 @@
+{
+  "[dart]": {
+    "editor.formatOnSave": true,
+    "editor.formatOnType": false,
+    "editor.rulers": [80],
+    "editor.selectionHighlight": true,
+    "editor.tabCompletion": "onlySnippets",
+    "editor.wordBasedSuggestions": "off"
+  },
+  "dart.flutterSdkPath": ".fvm/versions/3.41.0",
+  "dart.lineLength": 80,
+  "editor.codeActionsOnSave": {
+    "editor.formatOnSave": "explicit",
+    "source.fixAll": "explicit",
+    "source.organizeImports": "explicit",
+    "source.sortImports": "explicit"
+  },
+  "editor.wordWrapColumn": 80,
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.expand": false,
+  "explorer.fileNesting.patterns": {
+    "*.dart": "$(capture).g.dart, $(capture).freezed.dart",
+    "pubspec.yaml": ".metadata, pubspec.lock, analysis_options.yaml, .flutter-plugins, .flutter-plugins-dependencies"
+  },
+  "files.watcherExclude": {
+    "**/.fvm/**": true,
+    "**/.dart_tool/**": true,
+    "**/build/**": true,
+    "**/ios/Pods/**": true,
+    "**/macos/Pods/**": true,
+    "**/android/.gradle/**": true,
+    "**/.wrangler/**": true,
+    "**/*.freezed.dart": true,
+    "**/*.g.dart": true,
+    "**/*.mock.dart": true,
+    "**/*.s.dart": true
+  },
+  "search.exclude": {
+    "**/.fvm/**": true,
+    "**/.dart_tool/**": true,
+    "**/build/**": true,
+    "**/ios/Pods/**": true,
+    "**/macos/Pods/**": true,
+    "**/android/.gradle/**": true,
+    "**/*.freezed.dart": true,
+    "**/*.g.dart": true
+  }
+}
