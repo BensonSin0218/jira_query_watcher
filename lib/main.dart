@@ -143,6 +143,64 @@ class _WatchPageState extends State<WatchPage> {
     if (watch != null) await controller.updateWatch(watch);
   }
 
+  Future<void> _showJqlDialog(JqlWatch watch) {
+    return showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('${watch.displayName} 的 JQL'),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 540, maxHeight: 400),
+          child: SingleChildScrollView(
+            child: SelectableText(
+              watch.jql,
+              style: const TextStyle(fontFamily: 'monospace'),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('關閉'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openIssueInBrowser(String issueKey) async {
+    final baseUrl = controller.config.baseUrl.trim().replaceFirst(
+      RegExp(r'/+$'),
+      '',
+    );
+    final uri = Uri.tryParse(
+      '$baseUrl/browse/${Uri.encodeComponent(issueKey)}',
+    );
+    if (uri == null ||
+        uri.host.isEmpty ||
+        (uri.scheme != 'http' && uri.scheme != 'https')) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('請先設定有效的 Jira Base URL。')));
+      }
+      return;
+    }
+
+    try {
+      final result = await Process.run('open', [uri.toString()]);
+      if (result.exitCode != 0 && mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('無法開啟 Jira 網頁。')));
+      }
+    } on ProcessException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('無法開啟 Jira 網頁。')));
+    }
+  }
+
   Future<void> _removeWatch(WatchRuntime state) async {
     final shouldRemove = await showDialog<bool>(
       context: context,
@@ -448,12 +506,30 @@ class _WatchPageState extends State<WatchPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        watch.displayName,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      Row(
+                        spacing: 8,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              watch.displayName,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => _showJqlDialog(watch),
+                            icon: const Icon(Icons.info_outline),
+                            tooltip: '查看 JQL',
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 32,
+                              minHeight: 32,
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -479,21 +555,6 @@ class _WatchPageState extends State<WatchPage> {
               ],
             ),
             const SizedBox(height: 14),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                watch.jql,
-                maxLines: 4,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontFamily: 'monospace'),
-              ),
-            ),
-            const SizedBox(height: 14),
             Wrap(
               spacing: 24,
               runSpacing: 12,
@@ -512,6 +573,10 @@ class _WatchPageState extends State<WatchPage> {
                 ),
               ],
             ),
+            if (diff.hasChanges) ...[
+              const SizedBox(height: 14),
+              _ChangesTable(diff: diff, onOpenIssue: _openIssueInBrowser),
+            ],
             if (!watch.isValid) ...[
               const SizedBox(height: 14),
               const _InfoBanner(
@@ -531,10 +596,6 @@ class _WatchPageState extends State<WatchPage> {
                 message: state.error!,
                 error: true,
               ),
-            ],
-            if (diff.hasChanges) ...[
-              const SizedBox(height: 14),
-              _ChangeLists(diff: diff),
             ],
             const SizedBox(height: 14),
             Wrap(
@@ -919,104 +980,140 @@ class _InfoBanner extends StatelessWidget {
   }
 }
 
-class _ChangeLists extends StatelessWidget {
-  const _ChangeLists({required this.diff});
+class _ChangesTable extends StatelessWidget {
+  const _ChangesTable({required this.diff, required this.onOpenIssue});
 
   final QueryDiff diff;
+  final Future<void> Function(String issueKey) onOpenIssue;
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 20,
-      runSpacing: 16,
+    final rows = [
+      ...diff.added
+          .take(10)
+          .map(
+            (issue) => _ChangeTableRow(
+              type: '新增',
+              color: Colors.green,
+              issue: issue,
+              status: issue.status ?? '未知',
+            ),
+          ),
+      ...diff.removed
+          .take(10)
+          .map(
+            (issue) => _ChangeTableRow(
+              type: '移除',
+              color: Colors.red,
+              issue: issue,
+              status: issue.status ?? '未知',
+            ),
+          ),
+      ...diff.statusChanges
+          .take(10)
+          .map(
+            (change) => _ChangeTableRow(
+              type: '狀態變更',
+              color: Colors.orange,
+              issue: change.current,
+              status:
+                  '${change.previous.status ?? '未知'} → ${change.current.status ?? '未知'}',
+            ),
+          ),
+    ];
+    final totalChanges =
+        diff.added.length + diff.removed.length + diff.statusChanges.length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (diff.added.isNotEmpty)
-          _IssueGroup(title: '新增', color: Colors.green, issues: diff.added),
-        if (diff.removed.isNotEmpty)
-          _IssueGroup(title: '移除', color: Colors.red, issues: diff.removed),
-        if (diff.statusChanges.isNotEmpty)
-          _StatusChangeGroup(changes: diff.statusChanges),
+        const Text('Jira 項目變化', style: TextStyle(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 6),
+        Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              columns: const [
+                DataColumn(label: Text('類型')),
+                DataColumn(label: Text('Jira Key')),
+                DataColumn(label: Text('摘要')),
+                DataColumn(label: Text('狀態')),
+                DataColumn(label: Text('操作')),
+              ],
+              rows: [
+                for (final row in rows)
+                  DataRow(
+                    cells: [
+                      DataCell(
+                        Text(
+                          row.type,
+                          style: TextStyle(
+                            color: row.color,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      DataCell(Text(row.issue.key)),
+                      DataCell(
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 360),
+                          child: Text(
+                            row.issue.summary,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                      DataCell(
+                        Text(
+                          row.status,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      DataCell(
+                        IconButton(
+                          onPressed: () => onOpenIssue(row.issue.key),
+                          icon: const Icon(Icons.open_in_new, size: 18),
+                          tooltip: '在瀏覽器開啟',
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 32,
+                            minHeight: 32,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+        ),
+        if (totalChanges > rows.length)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text('還有 ${totalChanges - rows.length} 項變化未顯示。'),
+          ),
       ],
     );
   }
 }
 
-class _IssueGroup extends StatelessWidget {
-  const _IssueGroup({
-    required this.title,
+class _ChangeTableRow {
+  const _ChangeTableRow({
+    required this.type,
     required this.color,
-    required this.issues,
+    required this.issue,
+    required this.status,
   });
 
-  final String title;
+  final String type;
   final Color color;
-  final List<JiraIssue> issues;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 410,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '$title (${issues.length})',
-            style: TextStyle(color: color, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 6),
-          ...issues
-              .take(10)
-              .map(
-                (issue) => Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(
-                    '${issue.key}  ${issue.summary}',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-          if (issues.length > 10) Text('還有 ${issues.length - 10} 項…'),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatusChangeGroup extends StatelessWidget {
-  const _StatusChangeGroup({required this.changes});
-
-  final List<IssueStatusChange> changes;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 410,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '狀態變更',
-            style: TextStyle(color: Colors.orange, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 6),
-          ...changes
-              .take(10)
-              .map(
-                (change) => Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(
-                    '${change.current.key}  '
-                    '${change.previous.status ?? '未知'} → '
-                    '${change.current.status ?? '未知'}',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-          if (changes.length > 10) Text('還有 ${changes.length - 10} 項…'),
-        ],
-      ),
-    );
-  }
+  final JiraIssue issue;
+  final String status;
 }
