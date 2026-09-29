@@ -10,7 +10,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   if (Platform.isMacOS) {
-    await autoUpdater.setFeedURL('https://你的網域/appcast.xml');
+    await autoUpdater.setFeedURL('https://github.com/BensonSin0218/jira_query_watcher/releases/latest/download/appcast.xml');
 
     // 最少 3600 秒
     await autoUpdater.setScheduledCheckInterval(86400);
