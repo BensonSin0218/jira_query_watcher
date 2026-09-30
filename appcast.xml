@@ -3,6 +3,14 @@
     <channel>
         <title>Jira Query Watcher</title>
         <item>
+            <title>1.1.1</title>
+            <pubDate>Thu, 01 Oct 2026 01:47:29 +0800</pubDate>
+            <sparkle:version>4</sparkle:version>
+            <sparkle:shortVersionString>1.1.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>12.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/BensonSin0218/jira_query_watcher/releases/latest/download/Jira-Query-Watcher-1.1.1.zip" length="19467965" type="application/octet-stream" sparkle:edSignature="n5hN3chWf081gy4Niqr6f2elQnmXylyvZ+T1tEef8S2DUIjN1zrNFSDLm17Gq1LCSU6BlEk1SnBfDVV1JY0TAw=="/>
+        </item>
+        <item>
             <title>1.1.0</title>
             <pubDate>Tue, 29 Sep 2026 23:50:53 +0800</pubDate>
             <sparkle:version>3</sparkle:version>
@@ -17,14 +25,6 @@
             <sparkle:shortVersionString>1.0.1</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>12.0</sparkle:minimumSystemVersion>
             <enclosure url="https://github.com/BensonSin0218/jira_query_watcher/releases/latest/download/Jira-Query-Watcher-1.0.1.zip" length="19357439" type="application/octet-stream" sparkle:edSignature="tetkakDv3xDuSponwnj9U7PQecluVqCOeVMtkG8pJMAq0pnh8He3W/67bub841iQ/N96U9MjoLgpW2VLCTA3AQ=="/>
-        </item>
-        <item>
-            <title>1.0.0</title>
-            <pubDate>Tue, 29 Sep 2026 15:04:34 +0800</pubDate>
-            <sparkle:version>1</sparkle:version>
-            <sparkle:shortVersionString>1.0.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>12.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/BensonSin0218/jira_query_watcher/releases/latest/download/Jira-Query-Watcher-1.0.0.zip" length="19354053" type="application/octet-stream" sparkle:edSignature="3nklPhWi1p/BpGtwZgPKT/BkaIbpmu2lcDd9Xqz2IrNn1WLKFnvxUCWC8RWInR8T4HBNIrBtY0J/TGozmOZGCQ=="/>
         </item>
     </channel>
 </rss>
