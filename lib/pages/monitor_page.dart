@@ -131,7 +131,8 @@ class MonitorPage extends StatelessWidget {
 
   Widget _buildWatchCard(BuildContext context, WatchRuntime state) {
     final watch = state.config;
-    final diff = state.lastDiff;
+    final diff = state.accumulatedDiff;
+    final lastDiff = state.lastDiff;
     final canPoll = controller.isReady && watch.isValid && !state.isPolling;
     final cardColor = Theme.of(context).colorScheme.surfaceContainerHighest;
 
@@ -220,17 +221,21 @@ class MonitorPage extends StatelessWidget {
                   label: '上次檢查',
                   value: _formatDateTime(state.lastCheckedAt),
                 ),
-                Metric(label: '上次新增', value: '${diff.added.length} 項'),
-                Metric(label: '上次移除', value: '${diff.removed.length} 項'),
+                Metric(label: '上次新增', value: '${lastDiff.added.length} 項'),
+                Metric(label: '上次移除', value: '${lastDiff.removed.length} 項'),
                 Metric(
                   label: '上次狀態變更',
-                  value: '${diff.statusChanges.length} 項',
+                  value: '${lastDiff.statusChanges.length} 項',
                 ),
               ],
             ),
             if (diff.hasChanges) ...[
               const SizedBox(height: 14),
-              ChangesTable(diff: diff, onOpenIssue: onOpenIssue),
+              ChangesTable(
+                diff: diff,
+                onOpenIssue: onOpenIssue,
+                onClear: () => controller.clearChanges(watch.id),
+              ),
             ],
             if (!watch.isValid) ...[
               const SizedBox(height: 14),

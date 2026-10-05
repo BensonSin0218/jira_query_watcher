@@ -11,6 +11,7 @@ class WatchRuntime {
     required this.config,
     List<JiraIssue> currentItems = const [],
     this.lastDiff = const QueryDiff(),
+    this.accumulatedDiff = const QueryDiff(),
     this.lastCheckedAt,
     this.hasBaseline = false,
   }) : currentItems = List.unmodifiable(currentItems);
@@ -18,6 +19,7 @@ class WatchRuntime {
   JqlWatch config;
   List<JiraIssue> currentItems;
   QueryDiff lastDiff;
+  QueryDiff accumulatedDiff;
   DateTime? lastCheckedAt;
   bool hasBaseline;
   bool isPolling = false;
@@ -181,6 +183,13 @@ class WatchController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void clearChanges(String id) {
+    final state = _watchStates[id];
+    if (state == null) return;
+    state.accumulatedDiff = const QueryDiff();
+    notifyListeners();
+  }
+
   Future<void> setWatchEnabled(String id, bool enabled) async {
     final state = _watchStates[id];
     if (state == null || state.config.enabled == enabled) return;
@@ -317,6 +326,7 @@ class WatchController extends ChangeNotifier {
 
       state.currentItems = List.unmodifiable(result);
       state.lastDiff = diff;
+      state.accumulatedDiff = _mergeDiff(state.accumulatedDiff, diff);
       state.lastCheckedAt = checkedAt;
       state.hasBaseline = true;
       if (isInitialBaseline) {
@@ -425,6 +435,7 @@ class WatchController extends ChangeNotifier {
   void _resetState(WatchRuntime state) {
     state.currentItems = const [];
     state.lastDiff = const QueryDiff();
+    state.accumulatedDiff = const QueryDiff();
     state.lastCheckedAt = null;
     state.hasBaseline = false;
     state.error = null;
@@ -459,6 +470,23 @@ class WatchController extends ChangeNotifier {
       parts.add('狀態變更 ${diff.statusChanges.length} 項');
     }
     return parts.join('，');
+  }
+
+  QueryDiff _mergeDiff(QueryDiff accumulated, QueryDiff newDiff) {
+    final addedKeys = accumulated.added.map((issue) => issue.key).toSet();
+    final removedKeys = accumulated.removed.map((issue) => issue.key).toSet();
+
+    return QueryDiff(
+      added: [
+        ...accumulated.added,
+        ...newDiff.added.where((issue) => !addedKeys.contains(issue.key)),
+      ],
+      removed: [
+        ...accumulated.removed,
+        ...newDiff.removed.where((issue) => !removedKeys.contains(issue.key)),
+      ],
+      statusChanges: [...accumulated.statusChanges, ...newDiff.statusChanges],
+    );
   }
 
   String _notificationBody(QueryDiff diff) {
