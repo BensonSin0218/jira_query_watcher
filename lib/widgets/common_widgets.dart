@@ -129,10 +129,12 @@ class ChangesTable extends StatelessWidget {
     super.key,
     required this.diff,
     required this.onOpenIssue,
+    required this.onClear,
   });
 
   final QueryDiff diff;
   final Future<void> Function(String issueKey) onOpenIssue;
+  final VoidCallback onClear;
 
   @override
   Widget build(BuildContext context) {
@@ -175,7 +177,24 @@ class ChangesTable extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text('Jira 項目變化', style: TextStyle(fontWeight: FontWeight.w700)),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Jira 項目變化',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            TextButton.icon(
+              onPressed: onClear,
+              icon: const Icon(Icons.clear_all, size: 18),
+              label: const Text('清除'),
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 6),
         Container(
           decoration: BoxDecoration(
