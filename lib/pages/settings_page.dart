@@ -1,5 +1,6 @@
 import 'package:auto_updater/auto_updater.dart';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../models.dart';
 import '../services/watch_controller.dart';
@@ -49,6 +50,8 @@ class SettingsPage extends StatelessWidget {
               _buildConnectionCard(context),
               const SizedBox(height: 16),
               _buildActionsCard(context),
+              const SizedBox(height: 16),
+              _buildVersionCard(context),
             ],
           ),
         ),
@@ -141,16 +144,6 @@ class SettingsPage extends StatelessWidget {
               onLaunchAtLoginChanged(value);
             },
           ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: FilledButton.icon(
-              onPressed: () async {
-                await autoUpdater.checkForUpdates();
-              },
-              icon: const Icon(Icons.system_update_outlined),
-              label: const Text('檢查更新'),
-            ),
-          ),
           if (controller.message != null || controller.error != null) ...[
             const Divider(height: 20),
             if (controller.message != null)
@@ -169,6 +162,69 @@ class SettingsPage extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+
+  Widget _buildVersionCard(BuildContext context) {
+    return SectionCard(
+      title: '版本',
+      icon: Icons.info_outline,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _InstalledVersion(),
+          const SizedBox(height: 18),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton.icon(
+              onPressed: () async {
+                await autoUpdater.checkForUpdates();
+              },
+              icon: const Icon(Icons.system_update_outlined),
+              label: const Text('檢查更新'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InstalledVersion extends StatefulWidget {
+  const _InstalledVersion();
+
+  @override
+  State<_InstalledVersion> createState() => _InstalledVersionState();
+}
+
+class _InstalledVersionState extends State<_InstalledVersion> {
+  late final Future<PackageInfo> _packageInfo;
+
+  @override
+  void initState() {
+    super.initState();
+    _packageInfo = PackageInfo.fromPlatform();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<PackageInfo>(
+      future: _packageInfo,
+      builder: (context, snapshot) {
+        final version = snapshot.hasError
+            ? '無法取得'
+            : snapshot.connectionState == ConnectionState.waiting
+            ? '讀取中…'
+            : snapshot.data?.version ?? '無法取得';
+        return ListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('目前安裝版本'),
+          trailing: Text(
+            version,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+        );
+      },
     );
   }
 }

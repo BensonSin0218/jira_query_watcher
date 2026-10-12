@@ -18,6 +18,86 @@ extension JiraAuthModeX on JiraAuthMode {
   }
 }
 
+class NotificationPeriod {
+  const NotificationPeriod({
+    this.startMinute = 0,
+    this.endMinute = 1439,
+    this.weekdays = const [1, 2, 3, 4, 5],
+  });
+
+  static const everyDay = NotificationPeriod(weekdays: [1, 2, 3, 4, 5, 6, 7]);
+  static const weekdayNames = ['一', '二', '三', '四', '五', '六', '日'];
+
+  final int startMinute;
+  final int endMinute;
+  final List<int> weekdays;
+
+  String? get validationError {
+    if (startMinute < 0 ||
+        startMinute > 1439 ||
+        endMinute < 0 ||
+        endMinute > 1439) {
+      return '通知時間必須介於 00:00–23:59。';
+    }
+    if (startMinute > endMinute) {
+      return '開始時間不可晚於結束時間；跨午夜請分成兩個時段。';
+    }
+    if (weekdays.isEmpty) return '請至少選擇一天。';
+    if (weekdays.any((day) => day < 1 || day > 7)) return '請選擇星期一至日。';
+    return null;
+  }
+
+  static String formatMinute(int minute) {
+    return '${(minute ~/ 60).toString().padLeft(2, '0')}:'
+        '${(minute % 60).toString().padLeft(2, '0')}';
+  }
+
+  String get timeLabel =>
+      '${formatMinute(startMinute)}–${formatMinute(endMinute)}';
+
+  String get weekdayLabel {
+    final days = weekdays.where((day) => day >= 1 && day <= 7).toSet().toList()
+      ..sort();
+    return days.isEmpty
+        ? '未選擇星期'
+        : '星期${days.map((day) => weekdayNames[day - 1]).join('、')}';
+  }
+
+  bool contains(DateTime time) {
+    if (validationError != null) return false;
+    final local = time.toLocal();
+    final minute = local.hour * 60 + local.minute;
+    return weekdays.contains(local.weekday) &&
+        minute >= startMinute &&
+        minute <= endMinute;
+  }
+
+  bool overlaps(NotificationPeriod other) {
+    return weekdays.any(other.weekdays.contains) &&
+        startMinute <= other.endMinute &&
+        endMinute >= other.startMinute;
+  }
+
+  factory NotificationPeriod.fromMap(Map<String, dynamic> map) {
+    final rawWeekdays = map['weekdays'];
+    return NotificationPeriod(
+      startMinute: map['startMinute'] is int ? map['startMinute'] as int : -1,
+      endMinute: map['endMinute'] is int ? map['endMinute'] as int : -1,
+      weekdays: rawWeekdays is List
+          ? List.unmodifiable(rawWeekdays.map((day) => day is int ? day : 0))
+          : const [],
+    );
+  }
+
+  Map<String, Object?> toMap() {
+    return {
+      'startMinute': startMinute,
+      'endMinute': endMinute,
+      'weekdays': weekdays,
+    };
+  }
+}
+
 class JqlWatch {
   const JqlWatch({
     this.id = '',
@@ -25,6 +105,7 @@ class JqlWatch {
     this.jql = '',
     this.intervalMinutes = 5,
     this.enabled = true,
+    this.notificationPeriods = const [NotificationPeriod()],
   });
 
   final String id;
@@ -32,6 +113,7 @@ class JqlWatch {
   final String jql;
   final int intervalMinutes;
   final bool enabled;
+  final List<NotificationPeriod> notificationPeriods;
 
   String get displayName {
     final value = name.trim();
@@ -41,21 +123,88 @@ class JqlWatch {
   bool get isValid {
     return jql.trim().isNotEmpty &&
         intervalMinutes >= 1 &&
-        intervalMinutes <= 30;
+        intervalMinutes <= 30 &&
+        notificationScheduleError == null;
+  }
+
+  String? get notificationScheduleError {
+    if (notificationPeriods.isEmpty) return '請新增至少一個通知時段。';
+    for (var i = 0; i < notificationPeriods.length; i++) {
+      final period = notificationPeriods[i];
+      final error = period.validationError;
+      if (error != null) return '時段 ${i + 1}：$error';
+      for (var j = 0; j < i; j++) {
+        if (period.overlaps(notificationPeriods[j])) {
+          return '時段 ${i + 1} 與時段 ${j + 1} 重疊，請調整時間或星期。';
+        }
+      }
+    }
+    return null;
+  }
+
+  bool isWithinNotificationPeriod(DateTime time) {
+    return notificationScheduleError == null &&
+        notificationPeriods.any((period) => period.contains(time));
+  }
+
+  DateTime? nextNotificationBoundaryAfter(DateTime time) {
+    if (notificationScheduleError != null) return null;
+    final local = time.toLocal();
+    DateTime? next;
+    for (var offset = 0; offset <= 7; offset++) {
+      final day = DateTime(local.year, local.month, local.day + offset);
+      for (final period in notificationPeriods) {
+        if (!period.weekdays.contains(day.weekday)) continue;
+        for (final minute in [period.startMinute, period.endMinute + 1]) {
+          final boundary = DateTime(
+            day.year,
+            day.month,
+            day.day,
+            minute ~/ 60,
+            minute % 60,
+          );
+          if (boundary.isAfter(local) &&
+              (next == null || boundary.isBefore(next))) {
+            next = boundary;
+          }
+        }
+      }
+    }
+    return next;
   }
 
   String get queryFingerprint => jql.trim();
+  String get notificationFingerprint => notificationPeriods
+      .map(
+        (period) =>
+            '${period.startMinute}-${period.endMinute}:${period.weekdays.join(',')}',
+      )
+      .join('|');
 
   factory JqlWatch.fromMap(Map<String, dynamic> map) {
     final interval = ((map['intervalMinutes'] as num?)?.toInt() ?? 5)
         .clamp(1, 30)
         .toInt();
+    final rawPeriods = map['notificationPeriods'];
     return JqlWatch(
       id: map['id'] as String? ?? '',
       name: map['name'] as String? ?? '',
       jql: map['jql'] as String? ?? '',
       intervalMinutes: interval,
       enabled: map['enabled'] != false,
+      notificationPeriods: !map.containsKey('notificationPeriods')
+          ? const [NotificationPeriod.everyDay]
+          : rawPeriods is List
+          ? List.unmodifiable(
+              rawPeriods.map(
+                (period) => period is Map
+                    ? NotificationPeriod.fromMap(
+                        Map<String, dynamic>.from(period),
+                      )
+                    : const NotificationPeriod(weekdays: []),
+              ),
+            )
+          : const [],
     );
   }
 
@@ -66,6 +215,9 @@ class JqlWatch {
       'jql': jql.trim(),
       'intervalMinutes': intervalMinutes,
       'enabled': enabled,
+      'notificationPeriods': notificationPeriods
+          .map((period) => period.toMap())
+          .toList(),
     };
   }
 
@@ -75,6 +227,7 @@ class JqlWatch {
     String? jql,
     int? intervalMinutes,
     bool? enabled,
+    List<NotificationPeriod>? notificationPeriods,
   }) {
     return JqlWatch(
       id: id ?? this.id,
@@ -82,6 +235,7 @@ class JqlWatch {
       jql: jql ?? this.jql,
       intervalMinutes: intervalMinutes ?? this.intervalMinutes,
       enabled: enabled ?? this.enabled,
+      notificationPeriods: notificationPeriods ?? this.notificationPeriods,
     );
   }
 }

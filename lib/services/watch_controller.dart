@@ -29,17 +29,23 @@ class WatchRuntime {
 }
 
 class WatchController extends ChangeNotifier {
-  WatchController({NativeBridge? nativeBridge, JiraClient? jiraClient})
-    : _nativeBridge = nativeBridge ?? NativeBridge(),
-      _jiraClient = jiraClient ?? JiraClient();
+  WatchController({
+    NativeBridge? nativeBridge,
+    JiraClient? jiraClient,
+    DateTime Function()? now,
+  }) : _nativeBridge = nativeBridge ?? NativeBridge(),
+       _jiraClient = jiraClient ?? JiraClient(),
+       _now = now ?? DateTime.now;
 
   final NativeBridge _nativeBridge;
   final JiraClient _jiraClient;
+  final DateTime Function() _now;
   final Map<String, WatchRuntime> _watchStates = {};
   final Map<String, Timer> _timers = {};
 
   WatchConfig _config = WatchConfig();
   bool _isInitialized = false;
+  bool _isDisposed = false;
   bool _notificationPermissionRequested = false;
   String? _error;
   String? _message;
@@ -63,6 +69,11 @@ class WatchController extends ChangeNotifier {
   String? get message => _message;
   bool get isReady => _config.isConnectionValid;
 
+  bool isWithinNotificationPeriod(String watchId) {
+    return _watchStates[watchId]?.config.isWithinNotificationPeriod(_now()) ??
+        false;
+  }
+
   List<JiraIssue> get currentItems => _watchStates.length == 1
       ? _watchStates.values.single.currentItems
       : const [];
@@ -78,7 +89,14 @@ class WatchController extends ChangeNotifier {
   String get statusLabel {
     if (isPolling) return '正在檢查';
     if (error != null) return '需要注意';
-    if (isRunning) return '監聽中';
+    if (isRunning) {
+      return _watchStates.values.any(
+            (watch) =>
+                watch.isRunning && isWithinNotificationPeriod(watch.config.id),
+          )
+          ? '監聽中'
+          : '等待通知時段';
+    }
     if (!_config.isConnectionValid) return '尚未設定完成';
     if (_watchStates.isEmpty) return '尚未新增監聽';
     return '已暫停';
@@ -89,6 +107,7 @@ class WatchController extends ChangeNotifier {
 
     try {
       final state = await _nativeBridge.loadState();
+      if (_isDisposed) return;
       _config = _normalizeConfig(state.config);
       for (final watch in _config.watches) {
         final snapshot = state.snapshots[watch.id];
@@ -104,6 +123,7 @@ class WatchController extends ChangeNotifier {
 
       await _syncTimers();
     } catch (error) {
+      if (_isDisposed) return;
       _isInitialized = true;
       _error = '無法讀取本機設定：${_friendlyError(error)}';
       notifyListeners();
@@ -147,7 +167,8 @@ class WatchController extends ChangeNotifier {
     final needsRestart =
         queryChanged ||
         previous.intervalMinutes != watch.intervalMinutes ||
-        previous.enabled != watch.enabled;
+        previous.enabled != watch.enabled ||
+        previous.notificationFingerprint != watch.notificationFingerprint;
     if (needsRestart) _stopTimer(watch.id);
     if (queryChanged) _resetState(state);
 
@@ -251,7 +272,9 @@ class WatchController extends ChangeNotifier {
   }
 
   Future<void> _syncTimers() async {
+    if (_isDisposed) return;
     for (final state in _watchStates.values.toList()) {
+      if (_isDisposed) return;
       final shouldRun =
           state.config.enabled &&
           _config.isConnectionValid &&
@@ -267,6 +290,7 @@ class WatchController extends ChangeNotifier {
   }
 
   Future<void> _startWatch(String id) async {
+    if (_isDisposed) return;
     final state = _watchStates[id];
     if (state == null) return;
     if (!_config.isConnectionValid) {
@@ -277,7 +301,7 @@ class WatchController extends ChangeNotifier {
     }
     if (!state.config.isValid) {
       state.isRunning = false;
-      state.error = '請填寫 JQL。';
+      state.error = state.config.notificationScheduleError ?? '請填寫 JQL。';
       notifyListeners();
       return;
     }
@@ -290,23 +314,80 @@ class WatchController extends ChangeNotifier {
 
     if (!_notificationPermissionRequested) {
       await _nativeBridge.requestNotificationPermission();
+      if (_isDisposed) return;
       _notificationPermissionRequested = true;
     }
-    await _pollWatch(id);
-
-    final current = _watchStates[id];
-    if (identical(current, state) && state.isRunning && state.config.enabled) {
-      _timers[id] = Timer.periodic(
-        Duration(minutes: state.config.intervalMinutes),
-        (_) => unawaited(_pollWatch(id)),
-      );
+    if (!_isScheduledState(id, state)) return;
+    if (state.config.isWithinNotificationPeriod(_now())) {
+      await _pollWatch(id);
     }
+    if (_isScheduledState(id, state)) _scheduleNext(id);
+  }
+
+  bool _isScheduledState(String id, WatchRuntime state) {
+    return !_isDisposed &&
+        identical(_watchStates[id], state) &&
+        state.isRunning &&
+        state.config.enabled;
+  }
+
+  void _scheduleNext(String id) {
+    final state = _watchStates[id];
+    if (state == null || !_isScheduledState(id, state)) return;
+
+    final now = _now();
+    final watch = state.config;
+    final isActive = watch.isWithinNotificationPeriod(now);
+    final boundary = watch.nextNotificationBoundaryAfter(now);
+    DateTime? next;
+    if (isActive) {
+      final nextPoll = now.add(Duration(minutes: watch.intervalMinutes));
+      next = boundary == null || nextPoll.isBefore(boundary)
+          ? nextPoll
+          : boundary;
+    } else {
+      next = boundary;
+    }
+    if (next == null) {
+      _stopTimer(id);
+      return;
+    }
+
+    var delay = next.difference(now);
+    if (delay <= Duration.zero) delay = const Duration(seconds: 1);
+    final scheduledState = state;
+    late Timer timer;
+    timer = Timer(delay, () {
+      if (!identical(_timers[id], timer)) return;
+      _timers.remove(id);
+      if (!_isScheduledState(id, scheduledState)) return;
+      unawaited(_handleScheduledEvent(id, scheduledState));
+    });
+    _timers[id] = timer;
+  }
+
+  Future<void> _handleScheduledEvent(String id, WatchRuntime state) async {
+    if (!_isScheduledState(id, state)) return;
+    if (!state.config.isWithinNotificationPeriod(_now())) {
+      _scheduleNext(id);
+      if (!_isDisposed) notifyListeners();
+      return;
+    }
+
+    await _pollWatch(id);
+    if (_isScheduledState(id, state)) _scheduleNext(id);
   }
 
   Future<void> _pollWatch(String id) async {
+    if (_isDisposed) return;
     final state = _watchStates[id];
     if (state == null || state.isPolling) return;
-    if (!_config.isConnectionValid || !state.config.isValid) return;
+    if (!_config.isConnectionValid ||
+        !state.config.enabled ||
+        !state.config.isValid ||
+        !state.config.isWithinNotificationPeriod(_now())) {
+      return;
+    }
 
     final watch = state.config;
     final connectionFingerprint = _config.connectionFingerprint;
@@ -316,13 +397,16 @@ class WatchController extends ChangeNotifier {
 
     try {
       final result = await _jiraClient.search(_config, watch);
-      if (!_isCurrent(state, watch, connectionFingerprint)) return;
+      if (!_isCurrent(state, watch, connectionFingerprint) ||
+          !watch.isWithinNotificationPeriod(_now())) {
+        return;
+      }
 
       final isInitialBaseline = !state.hasBaseline;
       final diff = isInitialBaseline
           ? const QueryDiff()
           : compareIssues(state.currentItems, result);
-      final checkedAt = DateTime.now();
+      final checkedAt = _now();
 
       state.currentItems = List.unmodifiable(result);
       state.lastDiff = diff;
@@ -338,7 +422,9 @@ class WatchController extends ChangeNotifier {
       }
       await _persist();
 
-      if (diff.hasChanges) {
+      if (diff.hasChanges &&
+          _isCurrent(state, watch, connectionFingerprint) &&
+          watch.isWithinNotificationPeriod(_now())) {
         await _nativeBridge.showNotification(
           title: '${watch.displayName} 有變化',
           body: _notificationBody(diff),
@@ -350,7 +436,7 @@ class WatchController extends ChangeNotifier {
         state.message = null;
       }
     } finally {
-      if (identical(_watchStates[id], state)) {
+      if (!_isDisposed && identical(_watchStates[id], state)) {
         state.isPolling = false;
         notifyListeners();
       }
@@ -362,8 +448,11 @@ class WatchController extends ChangeNotifier {
     JqlWatch watch,
     String connectionFingerprint,
   ) {
-    return identical(_watchStates[watch.id], state) &&
+    return !_isDisposed &&
+        identical(_watchStates[watch.id], state) &&
         state.config.queryFingerprint == watch.queryFingerprint &&
+        state.config.notificationFingerprint == watch.notificationFingerprint &&
+        state.config.enabled == watch.enabled &&
         _config.connectionFingerprint == connectionFingerprint;
   }
 
@@ -392,7 +481,9 @@ class WatchController extends ChangeNotifier {
           connectionChanged ||
           queryChanged ||
           existing.config.intervalMinutes != watch.intervalMinutes ||
-          existing.config.enabled != watch.enabled;
+          existing.config.enabled != watch.enabled ||
+          existing.config.notificationFingerprint !=
+              watch.notificationFingerprint;
       if (needsRestart) _stopTimer(watch.id);
       if (connectionChanged || queryChanged) _resetState(existing);
       existing.config = watch;
@@ -525,6 +616,7 @@ class WatchController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _isDisposed = true;
     for (final timer in _timers.values) {
       timer.cancel();
     }

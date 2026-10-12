@@ -157,7 +157,7 @@ xmllint --noout "$ROOT_DIR/appcast.xml"
 if ! git diff --quiet -- appcast.xml; then
   git add appcast.xml
   git commit -m "$(cat <<EOF
-Update Sparkle appcast for $VERSION.
+chore: update Sparkle appcast for $VERSION
 
 Generated with [Devin](https://devin.ai)
 

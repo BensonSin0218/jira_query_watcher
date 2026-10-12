@@ -66,7 +66,9 @@ class MonitorPage extends StatelessWidget {
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
               ),
               SizedBox(height: 4),
-              Text('每個監聽都有自己的檢查間隔與基準；issue 清單或 status 有變動時會發送 macOS 通知。'),
+              Text(
+                '每個監聽都有自己的檢查間隔、通知時間與基準；只在指定時段檢查，issue 清單或 status 有變動時會發送 macOS 通知。',
+              ),
             ],
           ),
         ),
@@ -133,7 +135,11 @@ class MonitorPage extends StatelessWidget {
     final watch = state.config;
     final diff = state.accumulatedDiff;
     final lastDiff = state.lastDiff;
-    final canPoll = controller.isReady && watch.isValid && !state.isPolling;
+    final canPoll =
+        controller.isReady &&
+        watch.isValid &&
+        controller.isWithinNotificationPeriod(watch.id) &&
+        !state.isPolling;
     final cardColor = Theme.of(context).colorScheme.surfaceContainerHighest;
 
     return Card(
@@ -191,7 +197,9 @@ class MonitorPage extends StatelessWidget {
                         state.isPolling
                             ? '正在檢查'
                             : state.isRunning
-                            ? '監聽中'
+                            ? controller.isWithinNotificationPeriod(watch.id)
+                                  ? '監聽中'
+                                  : '等待通知時段'
                             : watch.enabled
                             ? '等待設定完成'
                             : '已停用',
@@ -216,6 +224,7 @@ class MonitorPage extends StatelessWidget {
               runSpacing: 12,
               children: [
                 Metric(label: '檢查間隔', value: '${watch.intervalMinutes} 分鐘'),
+                Metric(label: '通知時間', value: _formatNotificationPeriods(watch)),
                 Metric(label: '目前結果', value: '${state.currentItems.length} 項'),
                 Metric(
                   label: '上次檢查',
@@ -239,9 +248,9 @@ class MonitorPage extends StatelessWidget {
             ],
             if (!watch.isValid) ...[
               const SizedBox(height: 14),
-              const InfoBanner(
+              InfoBanner(
                 icon: Icons.error_outline,
-                message: '請填寫 JQL 後才能開始檢查。',
+                message: watch.notificationScheduleError ?? '請填寫 JQL 後才能開始檢查。',
                 error: true,
               ),
             ],
@@ -310,6 +319,13 @@ class MonitorPage extends StatelessWidget {
       ),
     );
   }
+}
+
+String _formatNotificationPeriods(JqlWatch watch) {
+  if (watch.notificationPeriods.isEmpty) return '未設定';
+  return watch.notificationPeriods
+      .map((period) => '${period.timeLabel} ${period.weekdayLabel}')
+      .join('、');
 }
 
 String _formatDateTime(DateTime? value) {

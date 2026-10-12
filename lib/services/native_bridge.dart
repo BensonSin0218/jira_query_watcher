@@ -62,6 +62,7 @@ class StoredState {
         jql: jql,
         intervalMinutes: interval,
         enabled: map['enabled'] == true,
+        notificationPeriods: const [NotificationPeriod.everyDay],
       ),
     ];
   }
