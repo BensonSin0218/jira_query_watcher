@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jira_query_watcher/models.dart';
 import 'package:jira_query_watcher/services/jira_client.dart';
 import 'package:jira_query_watcher/services/native_bridge.dart';
 import 'package:jira_query_watcher/services/watch_controller.dart';
+import 'package:jira_query_watcher/widgets/common_widgets.dart';
 import 'package:jira_query_watcher/widgets/watch_editor_dialog.dart';
 
 void main() {
@@ -863,6 +865,55 @@ void main() {
     final restored = JiraIssue.fromStoredJson(issue.toStoredJson());
 
     expect(restored.status, 'In Progress');
+  });
+
+  testWidgets('opens an issue from the row context menu', (tester) async {
+    String? openedIssueKey;
+    String? copiedIssueKey;
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChangesTable(
+            diff: const QueryDiff(
+              added: [JiraIssue(key: 'ABC-1', summary: 'First issue')],
+            ),
+            onOpenIssue: (issueKey) async {
+              openedIssueKey = issueKey;
+            },
+            onCopyIssueLink: (issueKey) async {
+              copiedIssueKey = issueKey;
+            },
+            onClear: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('操作'), findsNothing);
+    expect(find.byIcon(Icons.open_in_new), findsNothing);
+
+    await tester.tap(find.text('ABC-1'), buttons: kSecondaryMouseButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('在瀏覽器開啟'), findsOneWidget);
+    expect(find.text('複製連結'), findsOneWidget);
+    await tester.tap(find.text('在瀏覽器開啟'));
+    await tester.pumpAndSettle();
+
+    expect(openedIssueKey, 'ABC-1');
+
+    await tester.tap(find.text('ABC-1'), buttons: kSecondaryMouseButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('複製連結'));
+    await tester.pumpAndSettle();
+
+    expect(copiedIssueKey, 'ABC-1');
   });
 }
 

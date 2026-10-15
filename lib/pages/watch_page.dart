@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models.dart';
 import '../services/watch_controller.dart';
@@ -130,21 +131,9 @@ class _WatchPageState extends State<WatchPage> {
   }
 
   Future<void> _openIssueInBrowser(String issueKey) async {
-    final baseUrl = controller.config.baseUrl.trim().replaceFirst(
-      RegExp(r'/+$'),
-      '',
-    );
-    final uri = Uri.tryParse(
-      '$baseUrl/browse/${Uri.encodeComponent(issueKey)}',
-    );
-    if (uri == null ||
-        uri.host.isEmpty ||
-        (uri.scheme != 'http' && uri.scheme != 'https')) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('請先設定有效的 Jira Base URL。')));
-      }
+    final uri = _issueUri(issueKey);
+    if (uri == null) {
+      _showInvalidJiraUrlMessage();
       return;
     }
 
@@ -161,6 +150,43 @@ class _WatchPageState extends State<WatchPage> {
         context,
       ).showSnackBar(const SnackBar(content: Text('無法開啟 Jira 網頁。')));
     }
+  }
+
+  Future<void> _copyIssueLink(String issueKey) async {
+    final uri = _issueUri(issueKey);
+    if (uri == null) {
+      _showInvalidJiraUrlMessage();
+      return;
+    }
+
+    await Clipboard.setData(ClipboardData(text: uri.toString()));
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已複製 Jira 連結。')));
+  }
+
+  Uri? _issueUri(String issueKey) {
+    final baseUrl = controller.config.baseUrl.trim().replaceFirst(
+      RegExp(r'/+$'),
+      '',
+    );
+    final uri = Uri.tryParse(
+      '$baseUrl/browse/${Uri.encodeComponent(issueKey)}',
+    );
+    if (uri == null ||
+        uri.host.isEmpty ||
+        (uri.scheme != 'http' && uri.scheme != 'https')) {
+      return null;
+    }
+    return uri;
+  }
+
+  void _showInvalidJiraUrlMessage() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('請先設定有效的 Jira Base URL。')));
   }
 
   Future<void> _removeWatch(WatchRuntime state) async {
@@ -212,6 +238,7 @@ class _WatchPageState extends State<WatchPage> {
                     onEditWatch: _editWatch,
                     onShowJql: _showJqlDialog,
                     onOpenIssue: _openIssueInBrowser,
+                    onCopyIssueLink: _copyIssueLink,
                     onRemoveWatch: _removeWatch,
                   )
                 : SettingsPage(

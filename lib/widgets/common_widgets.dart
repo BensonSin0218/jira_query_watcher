@@ -129,11 +129,13 @@ class ChangesTable extends StatelessWidget {
     super.key,
     required this.diff,
     required this.onOpenIssue,
+    required this.onCopyIssueLink,
     required this.onClear,
   });
 
   final QueryDiff diff;
   final Future<void> Function(String issueKey) onOpenIssue;
+  final Future<void> Function(String issueKey) onCopyIssueLink;
   final VoidCallback onClear;
 
   @override
@@ -209,13 +211,12 @@ class ChangesTable extends StatelessWidget {
                 DataColumn(label: Text('Jira Key')),
                 DataColumn(label: Text('摘要')),
                 DataColumn(label: Text('狀態')),
-                DataColumn(label: Text('操作')),
               ],
               rows: [
                 for (final row in rows)
                   DataRow(
                     cells: [
-                      DataCell(
+                      _issueMenuCell(
                         Text(
                           row.type,
                           style: TextStyle(
@@ -223,9 +224,10 @@ class ChangesTable extends StatelessWidget {
                             fontWeight: FontWeight.w700,
                           ),
                         ),
+                        row.issue.key,
                       ),
-                      DataCell(Text(row.issue.key)),
-                      DataCell(
+                      _issueMenuCell(Text(row.issue.key), row.issue.key),
+                      _issueMenuCell(
                         ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 360),
                           child: Text(
@@ -234,26 +236,15 @@ class ChangesTable extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                        row.issue.key,
                       ),
-                      DataCell(
+                      _issueMenuCell(
                         Text(
                           row.status,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                      DataCell(
-                        IconButton(
-                          onPressed: () => onOpenIssue(row.issue.key),
-                          icon: const Icon(Icons.open_in_new, size: 18),
-                          tooltip: '在瀏覽器開啟',
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                            minWidth: 32,
-                            minHeight: 32,
-                          ),
-                        ),
+                        row.issue.key,
                       ),
                     ],
                   ),
@@ -267,6 +258,17 @@ class ChangesTable extends StatelessWidget {
             child: Text('還有 ${totalChanges - rows.length} 項變化未顯示。'),
           ),
       ],
+    );
+  }
+
+  DataCell _issueMenuCell(Widget child, String issueKey) {
+    return DataCell(
+      _IssueContextMenuCell(
+        issueKey: issueKey,
+        onOpenIssue: onOpenIssue,
+        onCopyIssueLink: onCopyIssueLink,
+        child: child,
+      ),
     );
   }
 }
@@ -283,4 +285,77 @@ class _ChangeTableRow {
   final Color color;
   final JiraIssue issue;
   final String status;
+}
+
+enum _IssueMenuAction { open, copyLink }
+
+class _IssueContextMenuCell extends StatelessWidget {
+  const _IssueContextMenuCell({
+    required this.issueKey,
+    required this.onOpenIssue,
+    required this.onCopyIssueLink,
+    required this.child,
+  });
+
+  final String issueKey;
+  final Future<void> Function(String issueKey) onOpenIssue;
+  final Future<void> Function(String issueKey) onCopyIssueLink;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onSecondaryTapDown: (details) {
+          _showMenu(context, details.globalPosition);
+        },
+        child: child,
+      ),
+    );
+  }
+
+  Future<void> _showMenu(BuildContext context, Offset globalPosition) async {
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final localPosition = overlay.globalToLocal(globalPosition);
+    final action = await showMenu<_IssueMenuAction>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        localPosition.dx,
+        localPosition.dy,
+        overlay.size.width - localPosition.dx,
+        overlay.size.height - localPosition.dy,
+      ),
+      items: const [
+        PopupMenuItem<_IssueMenuAction>(
+          value: _IssueMenuAction.open,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.open_in_new, size: 18),
+              SizedBox(width: 8),
+              Text('在瀏覽器開啟'),
+            ],
+          ),
+        ),
+        PopupMenuItem<_IssueMenuAction>(
+          value: _IssueMenuAction.copyLink,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.link, size: 18),
+              SizedBox(width: 8),
+              Text('複製連結'),
+            ],
+          ),
+        ),
+      ],
+    );
+    if (action == _IssueMenuAction.open) {
+      await onOpenIssue(issueKey);
+    } else if (action == _IssueMenuAction.copyLink) {
+      await onCopyIssueLink(issueKey);
+    }
+  }
 }
