@@ -12,6 +12,7 @@ class MonitorPage extends StatelessWidget {
     required this.onEditWatch,
     required this.onShowJql,
     required this.onOpenIssue,
+    required this.onCopyText,
     required this.onCopyIssueLink,
     required this.onRemoveWatch,
   });
@@ -21,6 +22,7 @@ class MonitorPage extends StatelessWidget {
   final Future<void> Function(WatchRuntime state) onEditWatch;
   final Future<void> Function(JqlWatch watch) onShowJql;
   final Future<void> Function(String issueKey) onOpenIssue;
+  final Future<void> Function(String text) onCopyText;
   final Future<void> Function(String issueKey) onCopyIssueLink;
   final Future<void> Function(WatchRuntime state) onRemoveWatch;
 
@@ -245,6 +247,7 @@ class MonitorPage extends StatelessWidget {
               ChangesTable(
                 diff: diff,
                 onOpenIssue: onOpenIssue,
+                onCopyText: onCopyText,
                 onCopyIssueLink: onCopyIssueLink,
                 onClear: () => controller.clearChanges(watch.id),
               ),

@@ -125,57 +125,125 @@ class InfoBanner extends StatelessWidget {
   }
 }
 
-class ChangesTable extends StatelessWidget {
+class ChangesTable extends StatefulWidget {
   const ChangesTable({
     super.key,
     required this.diff,
     required this.onOpenIssue,
+    required this.onCopyText,
     required this.onCopyIssueLink,
     required this.onClear,
   });
 
   final QueryDiff diff;
   final Future<void> Function(String issueKey) onOpenIssue;
+  final Future<void> Function(String text) onCopyText;
   final Future<void> Function(String issueKey) onCopyIssueLink;
   final VoidCallback onClear;
 
   @override
-  Widget build(BuildContext context) {
+  State<ChangesTable> createState() => _ChangesTableState();
+}
+
+class _ChangesTableState extends State<ChangesTable> {
+  int? _sortColumnIndex;
+  bool _sortAscending = true;
+
+  void _sortRows(int columnIndex, bool ascending) {
+    setState(() {
+      _sortColumnIndex = columnIndex;
+      _sortAscending = ascending;
+    });
+  }
+
+  List<_ChangeTableRow> _rows() {
     final rows = [
-      ...diff.added
-          .take(10)
-          .map(
-            (issue) => _ChangeTableRow(
-              type: '新增',
-              color: Colors.green,
-              issue: issue,
-              status: issue.status ?? '未知',
-            ),
-          ),
-      ...diff.removed
-          .take(10)
-          .map(
-            (issue) => _ChangeTableRow(
-              type: '移除',
-              color: Colors.red,
-              issue: issue,
-              status: issue.status ?? '未知',
-            ),
-          ),
-      ...diff.statusChanges
-          .take(10)
-          .map(
-            (change) => _ChangeTableRow(
-              type: '狀態變更',
-              color: Colors.orange,
-              issue: change.current,
-              status:
-                  '${change.previous.status ?? '未知'} → ${change.current.status ?? '未知'}',
-            ),
-          ),
+      ...widget.diff.added.map(
+        (issue) => _ChangeTableRow(
+          type: '新增',
+          color: Colors.green,
+          issue: issue,
+          status: issue.status ?? '未知',
+        ),
+      ),
+      ...widget.diff.removed.map(
+        (issue) => _ChangeTableRow(
+          type: '移除',
+          color: Colors.red,
+          issue: issue,
+          status: issue.status ?? '未知',
+        ),
+      ),
+      ...widget.diff.statusChanges.map(
+        (change) => _ChangeTableRow(
+          type: '狀態變更',
+          color: Colors.orange,
+          issue: change.current,
+          status:
+              '${change.previous.status ?? '未知'} → ${change.current.status ?? '未知'}',
+        ),
+      ),
     ];
+
+    final sortColumnIndex = _sortColumnIndex;
+    if (sortColumnIndex == null) return _limitRows(rows);
+
+    final indexedRows = rows.asMap().entries.toList();
+    indexedRows.sort((a, b) {
+      final comparison = _compareRows(
+        a.value,
+        b.value,
+        columnIndex: sortColumnIndex,
+      );
+      if (comparison != 0) {
+        return _sortAscending ? comparison : -comparison;
+      }
+      return a.key.compareTo(b.key);
+    });
+    return _limitRows(indexedRows.map((entry) => entry.value).toList());
+  }
+
+  List<_ChangeTableRow> _limitRows(List<_ChangeTableRow> rows) {
+    final countsByType = <String, int>{};
+    final visibleRows = <_ChangeTableRow>[];
+    for (final row in rows) {
+      final count = countsByType[row.type] ?? 0;
+      if (count >= 10) continue;
+      countsByType[row.type] = count + 1;
+      visibleRows.add(row);
+    }
+    return visibleRows;
+  }
+
+  int _compareRows(
+    _ChangeTableRow first,
+    _ChangeTableRow second, {
+    required int columnIndex,
+  }) {
+    final firstValue = switch (columnIndex) {
+      0 => first.type,
+      1 => first.issue.key,
+      2 => first.issue.summary,
+      3 => first.status,
+      _ => '',
+    };
+    final secondValue = switch (columnIndex) {
+      0 => second.type,
+      1 => second.issue.key,
+      2 => second.issue.summary,
+      3 => second.status,
+      _ => '',
+    };
+    return firstValue.toLowerCase().compareTo(secondValue.toLowerCase());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = _rows();
     final totalChanges =
-        diff.added.length + diff.removed.length + diff.statusChanges.length;
+        widget.diff.added.length +
+        widget.diff.removed.length +
+        widget.diff.statusChanges.length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -188,7 +256,7 @@ class ChangesTable extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.w700),
             ),
             TextButton.icon(
-              onPressed: onClear,
+              onPressed: widget.onClear,
               icon: const Icon(Icons.clear_all, size: 18),
               label: const Text('清除'),
               style: TextButton.styleFrom(
@@ -207,11 +275,13 @@ class ChangesTable extends StatelessWidget {
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: DataTable(
-              columns: const [
-                DataColumn(label: Text('類型')),
-                DataColumn(label: Text('Jira Key')),
-                DataColumn(label: Text('摘要')),
-                DataColumn(label: Text('狀態')),
+              sortColumnIndex: _sortColumnIndex,
+              sortAscending: _sortAscending,
+              columns: [
+                DataColumn(label: const Text('類型'), onSort: _sortRows),
+                DataColumn(label: const Text('Jira Key'), onSort: _sortRows),
+                DataColumn(label: const Text('摘要'), onSort: _sortRows),
+                DataColumn(label: const Text('狀態'), onSort: _sortRows),
               ],
               rows: [
                 for (final row in rows)
@@ -226,9 +296,11 @@ class ChangesTable extends StatelessWidget {
                           ),
                         ),
                         row.issue.key,
+                        row.type,
                       ),
                       _issueMenuCell(
                         SelectableText(row.issue.key),
+                        row.issue.key,
                         row.issue.key,
                       ),
                       _issueMenuCell(
@@ -237,6 +309,7 @@ class ChangesTable extends StatelessWidget {
                           child: SelectableText(row.issue.summary, maxLines: 2),
                         ),
                         row.issue.key,
+                        row.issue.summary,
                       ),
                       _issueMenuCell(
                         Text(
@@ -245,6 +318,7 @@ class ChangesTable extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                         row.issue.key,
+                        row.status,
                       ),
                     ],
                   ),
@@ -261,12 +335,14 @@ class ChangesTable extends StatelessWidget {
     );
   }
 
-  DataCell _issueMenuCell(Widget child, String issueKey) {
+  DataCell _issueMenuCell(Widget child, String issueKey, String copyText) {
     return DataCell(
       _IssueContextMenuCell(
         issueKey: issueKey,
-        onOpenIssue: onOpenIssue,
-        onCopyIssueLink: onCopyIssueLink,
+        onOpenIssue: widget.onOpenIssue,
+        onCopyText: widget.onCopyText,
+        onCopyIssueLink: widget.onCopyIssueLink,
+        copyText: copyText,
         child: child,
       ),
     );
@@ -287,19 +363,23 @@ class _ChangeTableRow {
   final String status;
 }
 
-enum _IssueMenuAction { open, copyLink }
+enum _IssueMenuAction { copy, open, copyLink }
 
 class _IssueContextMenuCell extends StatelessWidget {
   const _IssueContextMenuCell({
     required this.issueKey,
     required this.onOpenIssue,
+    required this.onCopyText,
     required this.onCopyIssueLink,
+    required this.copyText,
     required this.child,
   });
 
   final String issueKey;
   final Future<void> Function(String issueKey) onOpenIssue;
+  final Future<void> Function(String text) onCopyText;
   final Future<void> Function(String issueKey) onCopyIssueLink;
+  final String copyText;
   final Widget child;
 
   @override
@@ -331,6 +411,17 @@ class _IssueContextMenuCell extends StatelessWidget {
       ),
       items: const [
         PopupMenuItem<_IssueMenuAction>(
+          value: _IssueMenuAction.copy,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.copy_outlined, size: 18),
+              SizedBox(width: 8),
+              Text('複製'),
+            ],
+          ),
+        ),
+        PopupMenuItem<_IssueMenuAction>(
           value: _IssueMenuAction.open,
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -354,7 +445,9 @@ class _IssueContextMenuCell extends StatelessWidget {
         ),
       ],
     );
-    if (action == _IssueMenuAction.open) {
+    if (action == _IssueMenuAction.copy) {
+      await onCopyText(copyText);
+    } else if (action == _IssueMenuAction.open) {
       await onOpenIssue(issueKey);
     } else if (action == _IssueMenuAction.copyLink) {
       await onCopyIssueLink(issueKey);

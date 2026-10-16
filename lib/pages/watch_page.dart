@@ -166,6 +166,14 @@ class _WatchPageState extends State<WatchPage> {
     ).showSnackBar(const SnackBar(content: Text('已複製 Jira 連結。')));
   }
 
+  Future<void> _copyText(String text) async {
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已複製文字。')));
+  }
+
   Uri? _issueUri(String issueKey) {
     final baseUrl = controller.config.baseUrl.trim().replaceFirst(
       RegExp(r'/+$'),
@@ -238,6 +246,7 @@ class _WatchPageState extends State<WatchPage> {
                     onEditWatch: _editWatch,
                     onShowJql: _showJqlDialog,
                     onOpenIssue: _openIssueInBrowser,
+                    onCopyText: _copyText,
                     onCopyIssueLink: _copyIssueLink,
                     onRemoveWatch: _removeWatch,
                   )

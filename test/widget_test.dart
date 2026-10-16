@@ -925,6 +925,7 @@ void main() {
 
   testWidgets('opens an issue from the row context menu', (tester) async {
     String? openedIssueKey;
+    String? copiedText;
     String? copiedIssueKey;
     tester.view.physicalSize = const Size(1200, 800);
     tester.view.devicePixelRatio = 1;
@@ -940,6 +941,9 @@ void main() {
             ),
             onOpenIssue: (issueKey) async {
               openedIssueKey = issueKey;
+            },
+            onCopyText: (text) async {
+              copiedText = text;
             },
             onCopyIssueLink: (issueKey) async {
               copiedIssueKey = issueKey;
@@ -970,6 +974,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('在瀏覽器開啟'), findsOneWidget);
+    expect(find.text('複製'), findsOneWidget);
     expect(find.text('複製連結'), findsOneWidget);
     await tester.tap(find.text('在瀏覽器開啟'));
     await tester.pumpAndSettle();
@@ -978,10 +983,71 @@ void main() {
 
     await tester.tap(find.text('ABC-1'), buttons: kSecondaryMouseButton);
     await tester.pumpAndSettle();
+    await tester.tap(find.text('複製'));
+    await tester.pumpAndSettle();
+
+    expect(copiedText, 'ABC-1');
+
+    await tester.tap(find.text('ABC-1'), buttons: kSecondaryMouseButton);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('複製連結'));
     await tester.pumpAndSettle();
 
     expect(copiedIssueKey, 'ABC-1');
+  });
+
+  testWidgets('sorts change rows by the selected column', (tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChangesTable(
+            diff: const QueryDiff(
+              added: [
+                JiraIssue(key: 'ABC-2', summary: 'Second issue'),
+                JiraIssue(key: 'ABC-1', summary: 'First issue'),
+              ],
+            ),
+            onOpenIssue: (_) async {},
+            onCopyText: (_) async {},
+            onCopyIssueLink: (_) async {},
+            onClear: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final firstKey = find.byWidgetPredicate(
+      (widget) => widget is SelectableText && widget.data == 'ABC-2',
+    );
+    final secondKey = find.byWidgetPredicate(
+      (widget) => widget is SelectableText && widget.data == 'ABC-1',
+    );
+    expect(
+      tester.getTopLeft(firstKey).dy,
+      lessThan(tester.getTopLeft(secondKey).dy),
+    );
+
+    await tester.tap(find.text('Jira Key'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.getTopLeft(secondKey).dy,
+      lessThan(tester.getTopLeft(firstKey).dy),
+    );
+
+    await tester.tap(find.text('Jira Key'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.getTopLeft(firstKey).dy,
+      lessThan(tester.getTopLeft(secondKey).dy),
+    );
   });
 }
 
