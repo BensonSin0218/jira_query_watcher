@@ -967,6 +967,13 @@ void main() {
       ),
       findsOneWidget,
     );
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is SelectableText && widget.contextMenuBuilder == null,
+      ),
+      findsNWidgets(2),
+    );
     expect(find.text('操作'), findsNothing);
     expect(find.byIcon(Icons.open_in_new), findsNothing);
 
@@ -976,6 +983,7 @@ void main() {
     expect(find.text('在瀏覽器開啟'), findsOneWidget);
     expect(find.text('複製'), findsOneWidget);
     expect(find.text('複製連結'), findsOneWidget);
+    expect(find.text('Copy'), findsNothing);
     await tester.tap(find.text('在瀏覽器開啟'));
     await tester.pumpAndSettle();
 

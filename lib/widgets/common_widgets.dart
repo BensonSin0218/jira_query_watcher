@@ -299,14 +299,18 @@ class _ChangesTableState extends State<ChangesTable> {
                         row.type,
                       ),
                       _issueMenuCell(
-                        SelectableText(row.issue.key),
+                        SelectableText(row.issue.key, contextMenuBuilder: null),
                         row.issue.key,
                         row.issue.key,
                       ),
                       _issueMenuCell(
                         ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 360),
-                          child: SelectableText(row.issue.summary, maxLines: 2),
+                          child: SelectableText(
+                            row.issue.summary,
+                            maxLines: 2,
+                            contextMenuBuilder: null,
+                          ),
                         ),
                         row.issue.key,
                         row.issue.summary,
