@@ -853,18 +853,74 @@ void main() {
     expect(compareIssues(previous, current).hasChanges, isFalse);
   });
 
-  test('reads and stores the Jira issue status', () {
+  test('reads and stores the Jira issue status and updated time', () {
     final issue = JiraIssue.fromJson({
       'key': 'ABC-1',
       'fields': {
         'summary': 'Existing',
         'status': {'name': 'In Progress'},
+        'updated': '2026-10-12T09:02:03',
       },
     });
 
     final restored = JiraIssue.fromStoredJson(issue.toStoredJson());
 
     expect(restored.status, 'In Progress');
+    expect(restored.updatedAt, DateTime(2026, 10, 12, 9, 2, 3));
+  });
+
+  testWidgets('includes each issue updated time in notifications', (
+    tester,
+  ) async {
+    var now = DateTime(2026, 10, 12, 9);
+    final native = _FakeNativeBridge(
+      watches: const [JqlWatch(id: 'work', jql: 'project = ABC')],
+    );
+    final jira = _FakeJiraClient();
+    final controller = WatchController(
+      nativeBridge: native,
+      jiraClient: jira,
+      now: () => now,
+    );
+    jira.result = [
+      JiraIssue(
+        key: 'ABC-1',
+        summary: 'First',
+        status: 'To Do',
+        updatedAt: DateTime(2026, 10, 12, 8, 55, 12),
+      ),
+      JiraIssue(
+        key: 'ABC-2',
+        summary: 'Second',
+        updatedAt: DateTime(2026, 10, 12, 8, 59, 45),
+      ),
+    ];
+    await controller.initialize();
+
+    jira.result = [
+      JiraIssue(
+        key: 'ABC-1',
+        summary: 'First',
+        status: 'In Progress',
+        updatedAt: DateTime(2026, 10, 12, 9, 1, 30),
+      ),
+      JiraIssue(
+        key: 'ABC-3',
+        summary: 'Third',
+        updatedAt: DateTime(2026, 10, 12, 9, 1, 45),
+      ),
+    ];
+    now = DateTime(2026, 10, 12, 9, 2);
+    await controller.pollNow('work');
+
+    expect(
+      native.notificationBodies.single,
+      '新增 1 項：ABC-3（改動時間：2026/10/12 09:01:45）\n'
+      '移除 1 項：ABC-2（改動時間：2026/10/12 08:59:45）\n'
+      '狀態變更 1 項：ABC-1：To Do → In Progress'
+      '（改動時間：2026/10/12 09:01:30）',
+    );
+    controller.dispose();
   });
 
   testWidgets('opens an issue from the row context menu', (tester) async {
@@ -895,6 +951,18 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is SelectableText && widget.data == 'ABC-1',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is SelectableText && widget.data == 'First issue',
+      ),
+      findsOneWidget,
+    );
     expect(find.text('操作'), findsNothing);
     expect(find.byIcon(Icons.open_in_new), findsNothing);
 

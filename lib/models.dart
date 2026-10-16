@@ -389,19 +389,27 @@ class WatchConfig {
 }
 
 class JiraIssue {
-  const JiraIssue({required this.key, required this.summary, this.status});
+  const JiraIssue({
+    required this.key,
+    required this.summary,
+    this.status,
+    this.updatedAt,
+  });
 
   final String key;
   final String summary;
   final String? status;
+  final DateTime? updatedAt;
 
   factory JiraIssue.fromJson(Map<String, dynamic> json) {
     final fields = json['fields'];
     final rawStatus = fields is Map ? fields['status'] : null;
+    final rawUpdatedAt = fields is Map ? fields['updated'] : null;
     return JiraIssue(
       key: json['key'] as String? ?? '',
       summary: fields is Map ? fields['summary'] as String? ?? '' : '',
       status: rawStatus is Map ? rawStatus['name'] as String? : null,
+      updatedAt: _parseDateTime(rawUpdatedAt),
     );
   }
 
@@ -410,14 +418,27 @@ class JiraIssue {
       key: json['key'] as String? ?? '',
       summary: json['summary'] as String? ?? '',
       status: json['status'] as String?,
+      updatedAt: _parseDateTime(json['updatedAt'] ?? json['updated']),
     );
   }
 
   Map<String, String> toStoredJson() {
     final stored = {'key': key, 'summary': summary};
     if (status != null) stored['status'] = status!;
+    if (updatedAt != null) {
+      stored['updatedAt'] = updatedAt!.toIso8601String();
+    }
     return stored;
   }
+}
+
+DateTime? _parseDateTime(Object? value) {
+  if (value is DateTime) return value;
+  if (value is String) return DateTime.tryParse(value);
+  if (value is num) {
+    return DateTime.fromMillisecondsSinceEpoch(value.toInt());
+  }
+  return null;
 }
 
 class IssueStatusChange {

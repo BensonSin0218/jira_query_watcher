@@ -581,14 +581,18 @@ class WatchController extends ChangeNotifier {
   }
 
   String _notificationBody(QueryDiff diff) {
-    final added = diff.added.take(3).map((issue) => issue.key).join(', ');
-    final removed = diff.removed.take(3).map((issue) => issue.key).join(', ');
+    final added = diff.added.take(3).map(_issueNotificationLabel).join(', ');
+    final removed = diff.removed
+        .take(3)
+        .map(_issueNotificationLabel)
+        .join(', ');
     final statusChanges = diff.statusChanges
         .take(3)
         .map((change) {
           final previous = change.previous.status ?? '未知';
           final current = change.current.status ?? '未知';
-          return '${change.current.key}：$previous → $current';
+          return '${change.current.key}：$previous → $current'
+              '${_updatedAtLabel(change.current)}';
         })
         .join(', ');
     final parts = <String>[];
@@ -607,6 +611,24 @@ class WatchController extends ChangeNotifier {
       );
     }
     return parts.join('\n');
+  }
+
+  String _issueNotificationLabel(JiraIssue issue) {
+    return '${issue.key}${_updatedAtLabel(issue)}';
+  }
+
+  String _updatedAtLabel(JiraIssue issue) {
+    final updatedAt = issue.updatedAt;
+    if (updatedAt == null) return '';
+    final local = updatedAt.toLocal();
+    final date =
+        '${local.year}/${local.month.toString().padLeft(2, '0')}/'
+        '${local.day.toString().padLeft(2, '0')}';
+    final time =
+        '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}:'
+        '${local.second.toString().padLeft(2, '0')}';
+    return '（改動時間：$date $time）';
   }
 
   String _friendlyError(Object error) {

@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../models.dart';
@@ -226,15 +227,14 @@ class ChangesTable extends StatelessWidget {
                         ),
                         row.issue.key,
                       ),
-                      _issueMenuCell(Text(row.issue.key), row.issue.key),
+                      _issueMenuCell(
+                        SelectableText(row.issue.key),
+                        row.issue.key,
+                      ),
                       _issueMenuCell(
                         ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 360),
-                          child: Text(
-                            row.issue.summary,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                          child: SelectableText(row.issue.summary, maxLines: 2),
                         ),
                         row.issue.key,
                       ),
@@ -306,10 +306,12 @@ class _IssueContextMenuCell extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: double.infinity,
-      child: GestureDetector(
+      child: Listener(
         behavior: HitTestBehavior.opaque,
-        onSecondaryTapDown: (details) {
-          _showMenu(context, details.globalPosition);
+        onPointerDown: (event) {
+          if (event.buttons & kSecondaryMouseButton != 0) {
+            _showMenu(context, event.position);
+          }
         },
         child: child,
       ),
